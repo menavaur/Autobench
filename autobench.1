@@ -1,0 +1,182 @@
+.\"
+.\" autobench man page - Copyright (2001) Julian T. J. Midgley <jtjm@xenoclast.org>
+.\"
+.\"	This program is free software; you can redistribute it and/or modify
+.\"	it under the terms of the GNU General Public License as published by
+.\"	the Free Software Foundation; either version 2 of the License, or
+.\"	(at your option) any later version.
+.\"
+.\"	This program is distributed in the hope that it will be useful,
+.\"	but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"	GNU General Public License for more details.
+.\"
+.\"	You should have received a copy of the GNU General Public License
+.\"	along with this program; if not, write to the Free Software
+.\"	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.\"
+.TH AUTOBENCH 1 "October 14, 2002" "" ""
+.SH NAME
+autobench \- Automates the benchmarking of web servers using httperf
+.SH SYNOPSIS
+.BR "autobench [OPTIONS]..."
+.SH DESCRIPTION
+.B autobench
+.nh
+is used to to automate web server benchmarking.  It runs httperf
+against the specified host or hosts, ramping up the number of
+requested connections, and logging the results in TSV or CSV format
+files.  Most options can also be specified in the configuration file
+\fB$HOME/.autobench.conf\fR. Options specified on the command line override
+those in the configuration file.
+
+.B autobench 
+conducts benchmarks from a single test machine against
+the specified host or host.  To run a distributed benchmark (with
+several test machines), use \fBautobench_admin\fR and
+\fBautobenchd\fR.  See the man page for autobench_admin(1) for
+details.
+.SH OPTIONS
+Note that all of the options below with the exception of --quiet may
+also be used with 
+.B autobench_admin\fR.
+.TP
+.B --file \fIfilename\fR
+Send output to \fIfilename\fR instead of STDOUT
+.TP
+.B --high_rate \fIhrate\fR
+The number of connections per second to open at the end of the test
+.TP
+.B --low_rate \fIlrate\fR
+The number of connections per second to open at the start of the test
+.TP
+.B --rate_step \fIstep\fR
+autobench runs httperf numerous times against the target machines,
+starting at \fIlrate\fR connections per second, increasing the number
+of connections per second requested by \fIstep\fR until \fIhrate\fR is
+reached.
+.TP
+.B --host1  \fIhostname\fR
+The hostname of the first server under test
+.TP
+.B --host2  \fIhostname\fR
+The hostname of the second server under test (ignored if --single_host
+is specified)
+.TP
+.B --port1  \fIport\fR
+The port number on which host1's server is listening
+.TP
+.B --port2  \fIport\fR
+The port number on which host2's server is listening (ignored if --single_host
+is specified)
+.TP
+.B --num_conn \fInconn\fR
+\fInconn\fR is the number total number of connections to open per test
+.TP
+.B --const_test_time \fIlength\fR
+Used instead of --num_conn, this causes autobench to calculate a value
+for \fInconn\fR for each test to make the test last \fIlength\fR
+seconds.  It is recommended that this be used instead of --num_conn.
+For each test, \fInconn\fR is set to (current_rate *
+\fIlength\fR).  Note that no results will be
+obtained if \fIlength\fR is set to less than 10 seconds (since httperf
+samples only once every 10 seconds), and meaningful results (reproducible
+results derived from a significant number of samples) will require
+each test to last at least 60 seconds.  Use low values to gain a feel
+for the performance of the servers under test and to find appropriate
+values for --low_rate and --high_rate, and much higher values (at
+least 300 seconds for serious benchmarking) to obtain accurate results.
+.TP
+.B --num_call \fIncall\fR
+specifies the number of requests to send down each connection.  (Total
+number of requests per second = current rate * ncall.)
+.TP
+.B --output_fmt tsv|csv
+Set the output format to either CSV or TSV
+.TP
+.B --quiet
+Don't display httperf output on STDOUT.  This option should always be
+used if --file is not specified, since the httperf output will
+otherwise break up the results table.
+.TP 
+.B --single_host
+Only test a single server
+.TP
+.B --timeout \fItime\fR
+\fItime\fR is the time in seconds for which httperf will wait for a
+response from the server - responses received after this time will be
+counted as errors.
+.TP
+.B --uri1 \fIuri\fR
+The URI to test on the first server (eg. /foo/bar/index.html)
+.TP
+.B --uri2 \fIuri\fR
+The URI to test on the second server
+.TP
+.B --debug
+Print additional debugging information on stderr
+.TP
+.B --version
+Returns the current version
+.SH EXAMPLES
+Notice that in each of the examples below, configuration options not
+specified on the command line will be taken from the configuration
+file (\fB$HOME/.autobench.conf\fR)
+.TP
+autobench --single_host --host1 testhost.foo.com --uri1 /index.html --quiet --file bench.tsv
+Benchmark testhost.foo.com using the URI /index.html, don't display
+httperf output on STDOUT, and save the results in 'bench.tsv'.
+.TP
+autobench --host1 test1.foo.com --host2 test2.foo.com --uri1 /10k.txt --uri2 /10k.txt --rate_step 50 --quiet
+Conduct a comparative test of test1.foo.com and test2.foo.com,
+increasing the requested number of connections per second by 50 on
+each iteration.  Output will go to STDOUT.
+.SH ADDITIONAL HTTPERF OPTIONS
+Additional options may be passed to httperf by including them in the 
+configuration file \fB$HOME/.autobench.conf\fR prefixed with
+"httperf_", as in the example below.  Options that don't take
+arguments may be specified by assigning them a value of NULL.  The
+following lines add '--add-header "Authorization: Basic
+cm9iOjBjdGFuZQ==" --ssl --print-reply body --print-request header' to
+the httperf command line, for example.
+.TP
+httperf_add-header = "Authorization: Basic cm9iOjBjdGFuZQ=="
+.TP
+httperf_ssl = NULL
+.TP
+httperf_print-reply = body
+.TP
+httperf_print-request = header
+.SH FILES
+.TP 
+.I [/usr/local]/etc/autobench.conf
+Default configuration file, copied into the user's home directory when
+.B autobench 
+or
+.B autobench_admin
+is first run.  Defaults to \fI/etc/autobench.conf\fR if
+autobench was installed from the Debian package,
+\fI/usr/local/etc/autobench.conf\fR otherwise.
+.TP
+.I $HOME/.autobench.conf
+The active autobench configuration file.
+.SH ERRORS
+If zero replies are received for any reason, autobench will print the
+message: "Zero replies received, test invalid: rate <r>" to stderr
+where <r> will be the rate at which the problem occurred.  The output
+will also contain an error percentage of 101 for that rate.
+.SH SEE ALSO
+.B autobench_admin\fR(1),
+.B autobenchd\fR(1),
+.B httperf\fR(1),
+.B crfile\fR(1),
+.B bench2graph\fR(1)
+.nf
+.sp
+.B The Linux HTTP Benchmarking HOWTO \fRat
+http://www.xenoclast.org/doc/benchmark/ 
+.fi
+has further examples of the use of autobench.
+.SH AUTHOR
+Julian T. J. Midgley <jtjm@xenoclast.org>

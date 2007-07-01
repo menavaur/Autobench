@@ -1,0 +1,23 @@
+Autobench Installation
+----------------------
+
+Prerequisites:
+--------------
+
+httperf must be installed - it can be obtained from:
+
+http://www.hpl.hp.com/personal/David_Mosberger/httperf.html
+
+
+Installation
+------------
+
+Simply:
+
+  make
+  make install
+
+This will install autobench, sesslog and crfile, autobench's master
+configuration file, and man pages for all programs.
+
+

@@ -1,0 +1,179 @@
+.\"
+.\" autobench_admin man page - Copyright (2004) Julian T. J. Midgley <jtjm@xenoclast.org>
+.\"
+.\"	This program is free software; you can redistribute it and/or modify
+.\"	it under the terms of the GNU General Public License as published by
+.\"	the Free Software Foundation; either version 2 of the License, or
+.\"	(at your option) any later version.
+.\"
+.\"	This program is distributed in the hope that it will be useful,
+.\"	but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"	GNU General Public License for more details.
+.\"
+.\"	You should have received a copy of the GNU General Public License
+.\"	along with this program; if not, write to the Free Software
+.\"	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.\"
+.TH AUTOBENCH_ADMIN 1 "May 27, 2004" "" ""
+.SH NAME
+autobench_admin \- admin tool for running HTTP benchmarks using a cluster
+of distributed autobench servers
+.SH SYNOPSIS
+.BR "autobench_admin [OPTIONS]..."
+.SH DESCRIPTION
+.B autobench_admin
+.nh
+controls a cluster of distributed autobench test servers (each of
+which runs \fBautobenchd\fR).  When started, it contacts each of
+the test servers (specified using \fB--clients\fR, or read from the
+configuration file \fB$HOME/.autobench.conf\fR), and instructs them to
+run an httperf benchmark against the specified target server.  The
+results are collated and returned in a TSV or CSV format file.
+
+Distributed autobench is designed to simplify the process of
+conducting reliable HTTP benchmarks against web servers.  It is often
+difficult or impossible to saturate a web server when benchmarking it
+from a single test machine.  Distributed autobench allows any number
+of test machines to be used to conduct synchronised benchmarking of a
+target, with automatic collation of the results.  A
+typical testing setup, with three client machines (running 
+.B autobenchd\fR)
+is illustrated below.  Note that 
+.B autobench_admin 
+can be run on any machine (typically it will be run on one of the
+testhosts).
+.sp
+.nf              
+               +-----------------+ 
+               | autobench_admin |
+               +--------+--------+
+                        | 
+                        |
+        +---------------+---------------+
+        |               |               |
+        |               |               |
+  +-----+------+  +-----+------+  +-----+------+
+  | autobenchd |  | autobenchd |  | autobenchd |
+  | testhost1  |  | testhost2  |  | testhost3  |
+  +-----+------+  +-----+------+  +-----+------+
+        |               |               |
+        |               |               |
+        +---------------+---------------+
+                        |
+                        |
+                 +------+-----+
+                 | web server |
+                 | under test |
+                 +------------+
+.fi
+.sp
+To conduct a benchmark using distributed autobench, install the
+autobench package on each of the benchmark test machines (i.e. the
+machines that will be running httperf, \fInot\fR the machine running
+the web server to be benchmarked), and start 
+.B autobenchd
+on each of those machines.  By default, 
+.B autobenchd 
+will bind to INADDR_ANY, port 4600 (this can be overridden on the
+command line, see the
+.B autobenchd
+(1) man page for details).
+
+Then run autobench_admin to conduct a benchmark, specifying the hostname
+and port numbers of all of the benchmark test machines using the 
+.B --clients 
+option (or by setting the clients option in the autobench configuration
+file \fI$HOME/.autobench.conf\fR).  The details of the benchmark are specified with options
+identical to those used by
+.B autobench\fR.
+
+There is no need to restart the 
+.B autobenchd 
+daemons after each benchmarking - they continue to listen for
+connections from 
+.B autobench_admin 
+indefinitely.
+
+.B IMPORTANT:
+In order for distributed autobench to give accurate results, it is
+very important that the clocks on all the clients and the machine from
+which
+.B autobench_admin
+is run are synchronised with one another.  The use of NTP is
+recommended; in its absence use rdate to synchronise your clocks
+before beginning a run.
+.SH OPTIONS
+See  
+.B autobench\fR (1) for details of the available benchmark related options.  Only 
+.B autobench_admin
+specific options are detailed below.
+.TP
+.B --clients \fIhostname1:port1,hostname2:port2...\fR
+Specifies the benchmark test machines to contact.  Each hostname
+port-number pair must be separated from the next only by a comma.  No
+spaces are allowed in the clients string. E.g. ``
+.B --clients testhost1.foo.com:4600,testhost2.foo.com:4600
+\'\'
+.TP
+.B --debug
+Display debugging output
+.SH EXAMPLES
+Notice that in each of the examples below, configuration options not
+specified on the command line will be taken from the configuration
+file (\fB$HOME/.autobench.conf\fR)
+.na
+.TP
+autobench_admin --single_host --host1 www.bar.com --uri1 /index.html --clients test1.foo.com:4600,test2.foo.com:4600,test3.foo.com:4600 --file bench.tsv
+Benchmark www.bar.com from the three machines test1.foo.com through
+test3.foo.com using the URI /index.html saving the results in 'bench.tsv'.
+.TP
+autobench_admin --host1 apache.foo.com --host2 zeus.foo.com --uri1 /10k.txt --uri2 /10k.txt --rate_step 50 --low_rate 100 --high_rate 500 
+Conduct a comparative test of apache.foo.com and zeus.foo.com,
+increasing the requested number of connections per second from 100 to
+500 by a step of 50 on each iteration.  Since no clients are specified
+on the command line, those specified in \fI$HOME/.autobench.conf\fR
+will be used. Output will go to stdout.
+.ad
+.SH ADDITIONAL HTTPERF OPTIONS
+Additional options may be passed to httperf by including them in the 
+configuration file \fB$HOME/.autobench.conf\fR prefixed with
+"httperf_", as in the example below:
+.TP
+httperf_add-header = "Authorization: Basic cm9iOjBjdGFuZQ=="
+.TP
+httperf_print-reply = body
+.TP
+httperf_print-request = header
+.SH FILES
+.TP 
+.I [/usr/local]/etc/autobench.conf
+Default configuration file, copied into the user's home directory when
+.B autobench 
+or
+.B autobench_admin
+is first run.  Defaults to \fI/etc/autobench.conf\fR if
+autobench was installed from the Debian package,
+\fI/usr/local/etc/autobench.conf\fR otherwise.
+.TP
+.I $HOME/.autobench.conf
+The active autobench configuration file.
+.\".SH ERRORS
+.\"If zero replies are received for any reason, autobench will print the
+.\"message: "Zero replies received, test invalid: rate <r>" to stderr
+.\"where <r> will be the rate at which the problem occurred.  The output
+.\"will also contain an error percentage of 101 for that rate.
+.SH SEE ALSO
+.B autobenchd\fR(1),
+.B autobench\fR(1),
+.B httperf\fR(1),
+.B bench2graph\fR(1)
+.nf
+.sp
+.B The Linux HTTP Benchmarking HOWTO \fRat
+http://www.xenoclast.org/doc/benchmark/ 
+.fi
+has further examples of the use of autobench.
+.SH AUTHOR
+Julian T. J. Midgley <jtjm@xenoclast.org>

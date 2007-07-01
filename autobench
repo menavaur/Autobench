@@ -1,0 +1,335 @@
+#!/usr/bin/perl -w
+
+# autobench - tool to automatically benchmark one or more machines.
+
+# Copyright (C) 2001 - 2003 Julian T. J. Midgley <jtjm@xenoclast.org>
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+# A copy of version 2 of the GNU General Public License may be found
+# in the file "LICENCE" in the Autobench tarball.
+
+
+use strict;
+use Getopt::Long;
+
+# The location of the master config file
+my $MASTER_CONFIG = "/etc/autobench.conf";
+
+# The location of the autobench config file
+my $CONFIG_FILE = $ENV{HOME}."/.autobench.conf";
+
+my $VERSION="2.1.1";
+
+my $DEBUG = 0;
+#---------------------------------------------------------------------------
+# check_host($hostname)
+# checks that $hostname is resolvable
+sub
+check_host
+{
+    my $hostname = shift;
+    my @tmp = gethostbyname($hostname);
+    unless (@tmp) {
+        die "Fatal: hostname: $hostname is unresolvable\n";
+    }
+}
+
+#---------------------------------------------------------------------------
+# check_present (hashref $cref, @vars)
+# Checks that of the keys in @vars is present in %$cref
+
+sub
+check_present
+{
+    my ($cref, @vars) = @_;
+    my $err = 0;
+    foreach my $var (@vars) {
+        unless ($$cref{$var}) {
+            print STDERR "Argument $var not supplied\n";
+            $err ++;
+        }
+    }
+    if ($err) {
+        print STDERR "Please run autobench again, supplying the missing arguments\n".
+            "either on the command line, or in the config file\n";
+    }
+}
+
+#--------------------------------------------------------------------------
+# get_config([$config_file])
+#
+# Reads the config file ($CONFIG_FILE), and returns the configuration
+# as a hash.
+
+sub
+get_config
+{
+    my $CONFIG_FILE = shift @_; # optional - overrides $CONFIG_FILE if present
+    my %config;
+    my $install = 0;
+
+    open (IN,$CONFIG_FILE) 
+	or $install = 1;
+
+    if ($install) {
+	install_new_config($CONFIG_FILE);
+	print "Installation complete - please rerun autobench\n";
+	exit(0);
+    }
+    
+    while (<IN>) {
+	# Throw away comments and blank lines
+	next if (/^\#.*|^\s+$|^\s+\#|^$/);
+	
+	# Check for valid key-value pair and extract key into $1, value into $2
+	unless (/^\s*([a-zA-Z][a-zA-Z_0-9\-]*?)\s*=\s*(\S.*?)\s*$/) {
+	    warn "AUTOBENCH: Warning - invalid line in config file:'$_'";
+	    next;
+	}
+	
+	if (defined $config{$1}) {
+	    warn "AUTOBENCH: Warning - parameter '$1' defined more than once,".
+		 "ignoring '$1'='$2'";
+	    next;
+	}
+	$config{$1}=$2;
+    }
+    return %config;
+}
+
+#--------------------------------------------------------------------------
+# install_new_config($dest)
+# 
+# Installs a copy of the autobench config file into a user's home directory
+
+sub
+install_new_config
+{
+    my $dest = shift @_;
+    print STDERR "Autobench configuration file not found\n - installing new copy in $dest\n";
+    system("cp $MASTER_CONFIG $dest");
+}
+
+#--------------------------------------------------------------------------
+# test_host ($config_ref, $rate, $server, $uri, $port)
+sub
+test_host 
+{
+    my ($config_ref, $rate, $server, $uri, $port) = @_;
+    my %results;
+
+
+    # build a list of config options - change underscores to hyphens
+    my ($extra_httperf_opts) ;
+    foreach (keys %$config_ref) {
+	if ( /^httperf_(.*)$/ ) {
+            my $hf_val = $$config_ref{$_};
+            $hf_val = ($hf_val eq 'NULL') ? '' : $hf_val; 
+	    $extra_httperf_opts .= " --".$1." ".$hf_val ;
+	}
+    }
+    check_present($config_ref, qw(num_conn num_call timeout));
+    my $httperf_command = "httperf --server $server --uri \"$uri\" --num-conn ".
+	  $$config_ref{num_conn}." --num-call ".
+	  $$config_ref{num_call}." --timeout ".
+	  $$config_ref{timeout}." --rate $rate --port $port".
+	  ($extra_httperf_opts || "");
+
+    print STDERR "$httperf_command\n" if $DEBUG;
+
+    open (IN,  "$httperf_command |")
+	or die "Cannot execute httperf\n";
+    while(<IN>) {
+	if (/^Total: .*replies (\d+)/) {
+	    $results{replies}=$1;
+	}
+	if (/^Connection rate: (\d+\.\d)/) {
+	    $results{conn_rate}=$1;
+	}
+	if (/^Request rate: (\d+\.\d)/) {
+	    $results{req_rate}=$1;
+	}
+	if (/^Reply rate .*min (\d+\.\d) avg (\d+\.\d) max (\d+\.\d) stddev (\d+\.\d)/) {
+	    $results{rep_rate_min} = $1;
+	    $results{rep_rate_avg} = $2;
+	    $results{rep_rate_max} = $3;
+	    $results{rep_rate_stdv} = $4;
+	}
+	if (/^Reply time .* response (\d+\.\d)/) {
+	    $results{rep_time} = $1;
+	}
+	if (/^Net I\/O: (\d+\.\d)/) {
+	    $results{net_io} = $1;
+	}
+	if (/^Errors: total (\d+)/) {
+	    $results{errors} = $1;
+	}
+	print $_ unless $$config_ref{quiet};
+    }
+    close (IN);
+    
+    if ($results{replies} == 0) {
+	print STDERR "Zero replies received, test invalid: rate $rate\n";
+	$results{percent_errors} = 101;
+    }
+    else {
+	$results{percent_errors} = ( 100 * $results{errors} / $results{replies} );
+    }
+    return \%results;
+}
+
+sub 
+print_header
+{
+    my ($config_ref, $sep, $out_stream) = @_;
+    my %config = %{$config_ref};
+
+    # The following is really quite ugly...
+    print $out_stream "dem_req_rate".$sep.
+        "req_rate_$config{host1}".$sep.
+        "con_rate_$config{host1}".$sep.
+        "min_rep_rate_$config{host1}".$sep.
+        "avg_rep_rate_$config{host1}".$sep.
+        "max_rep_rate_$config{host1}".$sep.
+        "stddev_rep_rate_$config{host1}".$sep.
+        "resp_time_$config{host1}".$sep.
+        "net_io_$config{host1}".$sep.
+        "errors_$config{host1}";
+
+    if ($config{single_host}) {
+        print $out_stream "\n";
+    }
+    else {
+        print $out_stream $sep."req_rate_$config{host2}".$sep.
+            "con_rate_$config{host2}".$sep.
+            "min_rep_rate_$config{host2}".$sep.
+            "avg_rep_rate_$config{host2}".$sep.
+            "max_rep_rate_$config{host2}".$sep.
+            "stddev_rep_rate_$config{host2}".$sep.
+            "resp_time_$config{host2}".$sep.
+            "net_io_$config{host2}".$sep.
+            "errors_$config{host2}\n";
+    }
+}
+
+#--------------------------------------------------------------------------
+# Main
+
+# Declarations
+my ($curr_rate, $sep);
+my (%res_host1, %res_host2, $dem_req);
+
+# Get configuration from config file
+my %config = get_config($CONFIG_FILE);
+
+# Override config file with options supplied on the command line.
+GetOptions( \%config, "host1:s","host2:s","uri1:s","uri2:s","port1:i",
+            "port2:i","low_rate:i","high_rate:i","rate_step:i","num_conn:i",
+            "num_call:i","timeout:i","quiet","single_host","debug",
+	    "output_fmt=s","file=s","version", "const_test_time:i");
+
+if ($config{version}) {
+    print "Autobench $VERSION\nCopyright (C) Julian T. J. Midgley <jtjm\@xenoclast.org> 2003\n";
+    exit 0;
+}
+
+$DEBUG = 1 if ($config{debug});
+
+if ( $config{output_fmt} eq 'csv' ) {
+    $sep = ",";
+}
+elsif ( $config{output_fmt} eq 'tsv' ) {
+    $sep = "\t";
+}
+else {
+    die "Output Format '$config{output_fmt}' not supported";
+}
+
+# Check that httperf is in our path
+system("which httperf > /dev/null") == 0 
+    or die 'Cannot find httperf in $PATH; please ensure it is installed and your PATH is'."\ncorrectly set\n";
+
+# Basic input checking
+check_present(\%config, qw(low_rate high_rate rate_step host1 uri1 port1));
+check_host($config{host1});
+unless ($config{single_host}) {
+    check_present(\%config, qw(host2 uri2 port2));
+    check_host($config{host2});
+}
+if ($config{const_test_time} && $config{const_test_time} < 10) {
+    die "--const_test_time must be >= 10. See autobench(1) for details\n";
+}
+
+# Set the output stream correctly 
+if ($config{file}){
+    # Filename supplied with --file option, try to open it for writing.
+    open(OUT, ">$config{file}") or die "Cannot open $config{file} for writing\n";
+}
+else {
+    # Connect OUT to STDOUT
+    open(OUT, ">&STDOUT") or die "Bizarre, cannot connect OUT to STDOUT!";
+}
+
+# Print first line of output
+
+print_header(\%config, $sep, \*OUT);
+
+# Conduct the tests
+
+for ($curr_rate = $config{low_rate}; $curr_rate <= $config{high_rate}; 
+     $curr_rate += $config{rate_step}) {
+
+    if ($config{const_test_time}) {
+        $config{num_conn} = $curr_rate * $config{const_test_time};
+    }
+    # Test Host 1
+    %res_host1 = %{test_host (\%config, $curr_rate, $config{host1}, $config{uri1}, $config{port1})};
+    
+    # Test Host 2
+    unless ( $config{single_host} ) {
+	%res_host2 = %{test_host (\%config, $curr_rate, $config{host2}, $config{uri2}, $config{port2})};
+    } 
+
+    # Merge and Display Results
+    $dem_req = ($config{num_call} * $curr_rate);
+    print OUT $dem_req.$sep.
+	  $res_host1{req_rate}.$sep.
+	  $res_host1{conn_rate}.$sep.
+	  $res_host1{rep_rate_min}.$sep.
+	  $res_host1{rep_rate_avg}.$sep.
+	  $res_host1{rep_rate_max}.$sep.
+	  $res_host1{rep_rate_stdv}.$sep.
+          $res_host1{rep_time}.$sep.
+	  $res_host1{net_io}.$sep.
+          $res_host1{percent_errors};
+    if ($config{single_host}) {
+	print OUT "\n";
+    }
+    else {
+	print OUT $sep.$res_host2{req_rate}.$sep.
+	  $res_host2{conn_rate}.$sep.
+	  $res_host2{rep_rate_min}.$sep.
+	  $res_host2{rep_rate_avg}.$sep.
+	  $res_host2{rep_rate_max}.$sep.
+	  $res_host2{rep_rate_stdv}.$sep.
+	  $res_host2{rep_time}.$sep.
+	  $res_host2{net_io}.$sep.
+	  $res_host2{percent_errors}."\n";	   
+    }
+
+}
+
+close (OUT);

@@ -1,0 +1,219 @@
+2004-05-27  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released autobench-2.1.2
+	
+	* Added warning about synchronising clocks to autobench_admin.1
+	Revision: autobench--trunk--2.1--patch-1
+        modified files: autobench_admin.1
+
+	* Autobench now maintained in GNU Arch.  Mirror of archive at:
+	http://arch.xenoclast.org/phaedrus-2004/
+	Latest version may be fetched with:
+	  tla register-archive http://arch.xenoclast.org/phaedrus-2004/
+	  tla get autobench--trunk--2.1 autobench 
+	
+2003-11-25  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-2-1-1]
+
+	* autobench, autobench.1, autobench_admin:
+	Added support for httperf options that don't take an argument (such as
+	--ssl).  See the autobench man page for details.
+
+2003-07-27  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* autobench, autobench.1, autobench_admin:
+	Added new option --const_test_time which allows all tests to be forced
+	to take approximately the same real time; this prevents the early
+	tests in a series taking several times longer than the later ones, and
+	makes it easier to ensure that the test will last long enough for
+	httperf to sample.
+
+2003-05-06  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* autobench:
+	Now performs more thorough checking of options supplied in the
+	config file or on the command line
+
+2003-01-18  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* bench2graph:
+	Fixed bug caused by hasty fix in rev 1.3 whereby the temporary
+	output file was deleted immediately after creation.  Patch
+	supplied by Steve Greenland <steve at lsli.com>.
+
+2002-12-10  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* bench2graph: Output files are created in CWD once more.
+
+2002-10-15  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* autobenchd:
+	Fixed bug whereby httperf wouldn't be killed off when autobenchd
+	receives "ABORT" and SIGTERMs its child.
+
+2002-10-15  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-2-0-1]
+
+	* autobenchd:
+	Fixed bug whereby httperf wouldn't be killed off when autobenchd
+	receives "ABORT" and SIGTERMs its child.
+
+2002-10-14  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-2-0-0]
+
+	* autobench_admin.1, autobenchd.1:
+	Added man pages for autobench_admin and autobenchd.
+
+	* bench2graph:
+	Fixed bug whereby bench2graph would always move the output file to the
+	CWD instead of putting it where you asked for it.
+
+	* autobenchd:
+	Tidied up debugging output, and added --verbose option for monitoring
+	progress
+
+	* autobenchd:
+	Ensured that the child handles failed httperf runs correctly (by
+	checking for 0 replies), and fixed get_command()'s handling of EAGAINS
+
+	* autobench_admin:
+	Admin controller for distributed autobench.  First fully
+	functioning version.
+
+	* autobench.conf:
+	Added 'clients' config option for distributed autobench
+
+2002-10-13  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* autobenchd:
+	Daemon for distributed autobench.  Listens for connections from
+	autobench_admin, and runs httperf against the target host, sending
+	processed output back to autobench_admin for collation.
+
+2002-10-12  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* debian/changelog, debian/conffiles, debian/control, debian/copyright, debian/dirs, debian/rules:
+	Debianised ;-)
+
+	* Makefile:
+	Debianised - now set up either for building a Debian package or
+	installing in /usr/local (or elsewhere) in the usual way.
+
+	Added uninstall target which deletes everything.
+
+	Now automatically updates autobench with the correct location of the
+	master config file when PREFIX or ETCDIR are changed.
+
+2002-05-02  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-1-1-2]
+
+	* autobench, autobench.1:
+	Added a patch from Rob Fielding (rob at dsvr.net) which allows
+	additional httperf options to be specified in the configuration file.
+
+2001-07-16  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* bench2graph:
+	In the interests of portability, changed #!/bin/bash to #!/bin/sh
+
+2001-06-26  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-1-1-1]
+
+2001-06-26  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* autobench, autobench.1, autobench.conf:
+	autobench now accepts --port1 and --port2 options to set the ports on
+	which the servers should be contacted.  Both port1 and port2 are set
+	to 80 by default in autobench.conf.
+
+	Patches supplied by Daniel Serodio <daniel at ibnetwork.com.br>
+
+2001-06-21  Julian T J Midgley  <jtjm@xenoclast.org>
+
+	* Released [autobench-1-1-0]
+
+2001-06-21  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/Makefile:
+	Added benchgraph to install target
+
+2001-06-20  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/bench2graph.1: Man page for bench2graph
+
+	* /home/jtjm/cvsroot/autobench/bench2graph:
+	Draws gnuplot graphs from autobench's output.
+	Written by Samuel Dupas <samuel.dupas at synaptique.co.uk>
+
+2001-05-11  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/Makefile, /home/jtjm/cvsroot/autobench/sesslog.1, /home/jtjm/cvsroot/autobench/sesslog.c:
+	Added sesslog man page
+
+2001-04-22  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/crfile.c:
+	Simple fix to avoid warning during compile
+
+2001-04-18  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/autobench:
+	BUG FIX: --uri couldn't take an ampersand in its argument, and
+	occasional division by zero errors were reported when httperf reported
+	zero replies.  Both fixed.  Reported by Jocelyn
+	Rakotomalala <jocelyn at 24pmteam.com>.
+
+2001-04-17  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/sesslog.c:
+	Tidied up, and now defaults sensibly to use stdin and stdout when
+	appropriate.
+
+	* /home/jtjm/cvsroot/autobench/Makefile: Added entries for sesslog
+
+	* /home/jtjm/cvsroot/autobench/sesslog.c:
+	Program to convert NCSA Combined/CLF format web server log files into
+	httperf's wsesslog format.
+
+2001-03-22  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/autobench:
+	Now copies config file from master copy if not already present, and
+	supports --version option
+
+2001-03-21  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/autobench.1: autobench man page
+
+	* /home/jtjm/cvsroot/autobench/autobench:
+	Now works correctly with a single host
+
+2001-03-20  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/Makefile: Added 'debug' target
+
+	* /home/jtjm/cvsroot/autobench/crfile.c:
+	Now uses a buffer instead of writing each character individually -
+	gives significant speed improvement.
+
+	* /home/jtjm/cvsroot/autobench/Makefile: Added Makefile
+
+	* /home/jtjm/cvsroot/autobench/autobench, /home/jtjm/cvsroot/autobench/crfile.1, /home/jtjm/cvsroot/autobench/crfile.c:
+	Added crfile documentation
+
+	* /home/jtjm/cvsroot/autobench/crfile.c:
+	crfile - create files of arbitrary length
+
+2001-03-15  Julian T. J. Midgley  <jtjm@xenoclast.org>
+
+	* /home/jtjm/cvsroot/autobench/autobench, /home/jtjm/cvsroot/autobench/autobench.conf:
+	Autobench
+
+	* /home/jtjm/cvsroot/autobench/autobench, /home/jtjm/cvsroot/autobench/autobench.conf:
+	New file.
+

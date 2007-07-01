@@ -1,0 +1,17 @@
+Source: autobench
+Section: utils
+Priority: optional
+Maintainer: Julian T. J. Midgley <jtjm@xenoclast.org>
+Build-Depends: debhelper (>> 3.0.0), libc6
+Standards-Version: 3.5.2
+
+Package: autobench
+Architecture: any
+Depends: httperf, ${shlibs:Depends}
+Recommends: gnuplot
+Description: Automates  the  benchmarking  of web servers using httperf
+ autobench is used to to automate web server benchmarking.  It runs
+ httperf against the specified host or hosts, ramping up the number of
+ requested connections, and logging the results in TSV or CSV format
+ files.  Graphs can be automatically generated using gnuplot.
+

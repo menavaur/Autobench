@@ -1,0 +1,461 @@
+#!/usr/bin/perl -w
+
+# autobench_admin - command line administration tool for distributed autobench
+
+# Copyright (C) 2002 - 2003 Julian T. J. Midgley <jtjm@xenoclast.org>
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+# A copy of version 2 of the GNU General Public License may be found
+# in the file "LICENCE" in the Autobench tarball.
+
+use strict;
+use Socket;
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use Getopt::Long;
+use FileHandle;
+
+# The location of the master config file
+my $MASTER_CONFIG = "/etc/autobench.conf";
+
+# The location of the autobench config file
+my $CONFIG_FILE = $ENV{HOME}."/.autobench.conf";
+
+my $DEBUG = 0;
+
+my $VERSION = "2.1.1";
+
+#--------------------------------------------------------------------------
+# get_config([$config_file])
+#
+# Reads the config file ($CONFIG_FILE), and returns the configuration
+# as a hash.
+
+sub
+get_config
+{
+    my $CONFIG_FILE = shift @_; # optional - overrides $CONFIG_FILE if present
+    my %config;
+    my $install = 0;
+
+    open (IN,$CONFIG_FILE) 
+	or $install = 1;
+
+    if ($install) {
+	install_new_config($CONFIG_FILE);
+	print STDERR "Installation complete - please rerun autobench_admin\n";
+	exit(0);
+    }
+    
+    while (<IN>) {
+	# Throw away comments and blank lines
+	next if (/^\#.*|^\s+$|^\s+\#|^$/);
+	
+	# Check for valid key-value pair and extract key into $1, value into $2
+	unless (/^\s*([a-zA-Z][a-zA-Z_0-9\-]*?)\s*=\s*(\S.*?)\s*$/) {
+	    warn "AUTOBENCH: Warning - invalid line in config file:'$_'";
+	    next;
+	}
+	
+	if (defined $config{$1}) {
+	    warn "AUTOBENCH: Warning - parameter '$1' defined more than once,".
+		 "ignoring '$1'='$2'";
+	    next;
+	}
+	$config{$1}=$2;
+    }
+    return %config;
+}
+
+#--------------------------------------------------------------------------
+# install_new_config($dest)
+# 
+# Installs a copy of the autobench config file into a user's home directory
+
+sub
+install_new_config
+{
+    my $dest = shift @_;
+    print STDERR "Autobench configuration file not found\n - installing new copy in $dest\n";
+    system("cp $MASTER_CONFIG $dest");
+}
+
+#---------------------------------------------------------------------------
+# get_clients ($clients)
+sub
+get_clients
+{
+    my $clients = shift @_;
+    my @tmp_clients = split(/,/,$clients);
+    my ($host, %client_hash, $port, $str);
+
+    foreach $str (@tmp_clients) {
+	($host, $port)      = split(/:/,$str);
+	$client_hash{$host} = $port;
+    }
+    return \%client_hash;
+}
+
+#---------------------------------------------------------------------------
+# open_socket($host, $port)
+sub
+open_socket
+{
+    my ($host, $port) = @_;
+    my $iaddr = inet_aton($host)
+	or die "Invalid host: $host: $!";
+    my $paddr;
+
+    my $sock = new FileHandle;
+    socket ($sock, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+    $paddr = sockaddr_in($port, $iaddr);
+    connect($sock, $paddr)
+	or die "Connection to $host:$port failed: $!";
+    return $sock;
+}
+	    
+#---------------------------------------------------------------------------
+# set_non_block ($fh)
+sub
+set_non_block
+{
+    my $fh = shift @_;
+    my $flags = fcntl($fh, F_GETFL, 0)
+	or die "Can't get flags for socket: $!\n";
+    $flags = fcntl($fh, F_SETFL, $flags | O_NONBLOCK)
+	or die "Can't set flags for socket: $!\n";
+}
+
+#---------------------------------------------------------------------------
+# build_select_bits (@socks)
+
+sub
+build_select_bits
+{
+    my @socks = @_;
+    my ($sock, $selbits);
+    $selbits = '';
+
+    foreach $sock (@socks) {
+	vec($selbits, fileno($sock), 1) = 1;
+    }
+    
+    return $selbits;
+}
+
+#---------------------------------------------------------------------------
+# parse_response ($response)
+
+sub
+parse_response
+{
+    my $response = shift @_;
+    my @elements = split(/\n/, $response);
+    my ($el, %results, $key, $val);
+
+    foreach $el (@elements) {
+	next if ($el =~ /BENCH_COMPLETE|END_DATA/);
+	($key, $val) = split(/:/, $el);
+	$results{$key} = $val;
+    }
+    return \%results;
+}
+
+#---------------------------------------------------------------------------
+# collate_results($results_sock_ref, @socks)
+sub
+collate_results
+{
+    my ($results_sock_ref, @socks) = @_;
+    my ($sock, $key, %results);
+    
+    foreach $sock (@socks) {
+	foreach $key (keys %{$$results_sock_ref{$sock}}) {
+	    $results{$key} += $ { $$results_sock_ref{$sock}}{$key};
+	}
+    }
+    $results{rep_time} = $results{rep_time} / scalar(@socks);
+    $results{percent_errors} = $results{percent_errors} / scalar(@socks);
+    return \%results;
+}
+
+    
+#---------------------------------------------------------------------------
+# run_test($httperf_args, $clients_ref)
+sub
+run_test
+{
+    my ($httperf_args, $clients_ref) = @_;
+    my ($client, %client_socks, @socks, $sock, %response, %results_sock);
+    my ($rin, $rout, $buffer, $bytes, $nfound, $accepted, $completed);
+
+    # Open connections to each autobench host
+    foreach $client (keys %$clients_ref) {
+	$sock = open_socket($client, $$clients_ref{$client});
+	$client_socks{$sock} = $client;
+	print STDERR "Opened connection to $client:$$clients_ref{$client}\n"
+	    if $DEBUG;
+	# Make socket non-blocking
+	set_non_block($sock);
+	push(@socks, $sock);
+    }
+    
+    my $start_time = time() + 5;
+    print STDERR "  Command: $httperf_args\n".
+ 		 "  Time   : $start_time\n" if $DEBUG;    
+    # Send start commands to each client
+    foreach $sock (@socks) {
+	syswrite($sock, "$httperf_args\n$start_time\nEND_AB\n");
+	print STDERR "Issued start command to: $client_socks{$sock}\n" if $DEBUG;
+	$response{$sock} = '';
+    }
+
+
+    # Check that clients have accepted command
+    $accepted = 0;
+    while (! $accepted) {
+	$rin = build_select_bits(@socks);
+	$nfound = select($rout = $rin, undef, undef, undef);
+	foreach $sock (@socks) {
+	    $buffer= '';
+
+	    if(vec($rout, fileno($sock), 1) 
+	       && (! ($response{$sock} eq 'TRUE'))) {
+		$bytes = sysread($sock, $buffer, 2048);
+		if (! defined $bytes) {
+		    # Probably EAGAIN, don't do nowt
+		}
+		elsif ($bytes == 0) {
+		    die "FATAL: client $client_socks{$sock} closed connection";
+		}
+		else {
+		    $response{$sock} .= $buffer;
+		}
+	    }
+	}
+	foreach $sock (@socks) {
+
+	    if ($response{$sock} =~ /ACCEPTED\n/) {
+		$response{$sock} = 'TRUE';
+		print STDERR "$client_socks{$sock} accepted command\n" if $DEBUG;
+	    }
+	    if ($response{$sock} eq 'TRUE') {
+		$accepted ++;
+	    }
+	}
+	$accepted = 0 if ($accepted < scalar(@socks));
+    }
+
+    $completed = 0;
+    foreach $sock (@socks) {
+	$response{$sock} = '';
+    }
+
+    while (! $completed) {
+	$rin = build_select_bits(@socks);
+	$nfound = select($rout = $rin, undef, undef, undef);
+	foreach $sock (@socks) {
+	    if (vec($rout, fileno($sock), 1)) {
+		$bytes = sysread($sock, $buffer, 2048);
+		if (! defined $bytes) {
+		    # Probably EAGAIN, don't do nowt
+		}
+		elsif ($bytes == 0) {
+		    die "FATAL: client $client_socks{$sock} closed connection";
+		}
+		else {
+		    $response{$sock} .= $buffer;
+		}
+	    }
+	}
+	foreach $sock (@socks) {
+	    if ($response{$sock} =~ /END_DATA\n/) {
+		$completed ++;
+	    }
+	    elsif ($response{$sock} =~ /BENCH_FAILED\n/) {
+		die "FATAL: client $client_socks{$sock} sent BENCH_FAILED";
+	    }
+	}
+	$completed = 0 if ($completed < scalar(@socks));
+    }
+    
+    foreach $sock (@socks) {
+	$results_sock{$sock} = parse_response($response{$sock});
+    }
+    return collate_results(\%results_sock, @socks);
+
+    # testing only 
+
+}
+
+#---------------------------------------------------------------------------
+# test_host ($config_ref, $rate, $server, $uri, $port, $clients_ref)
+sub
+test_host 
+{
+    my ($config_ref, $rate, $server, $uri, $port, $clients_ref) = @_;
+    my (%results, $httperf_args, $extra_httperf_opts);
+    $extra_httperf_opts = '';
+
+    # Build list of extra httperf config options
+    foreach (keys %$config_ref) {
+	if ( /^httperf_(.*)$/ ) {
+            my $hf_val = $$config_ref{$_};
+            $hf_val = ($hf_val eq 'NULL') ? '' : $hf_val; 
+	    $extra_httperf_opts .= " --".$1." ".$hf_val ;
+	}
+    }
+    $httperf_args = "--server $server --uri \"$uri\" ".
+	"--num-conn ".$$config_ref{num_conn}.
+	" --num-call ".$$config_ref{num_call}.
+	" --timeout ".$$config_ref{timeout}.
+        " --rate $rate --port $port $extra_httperf_opts";
+
+    %results = %{run_test($httperf_args, $clients_ref)};
+
+    return \%results;
+}
+
+#---------------------------------------------------------------------------
+# main
+
+my (%clients, $httperf_args, $curr_rate, %res_host1, %res_host2, $dem_req);
+my ($sep, $client, $num_clients);
+
+# Read config
+my %config=get_config($CONFIG_FILE);
+
+# Override config file with options supplied on the command line.
+GetOptions( \%config, "host1:s","host2:s","uri1:s","uri2:s","port1:i",
+            "port2:i","low_rate:i","high_rate:i","rate_step:i",
+            "num_conn:i","num_call:i","timeout:i","quiet","single_host",
+	    "output_fmt=s","file=s","clients=s","version","debug",
+            "const_test_time:i");
+$DEBUG = 1 if (defined $config{debug});
+
+if ($config{version}) {
+    print "autobench_admin $VERSION\nCopyright (C) Julian T. J. Midgley <jtjm\@xenoclast.org> 2003\n";
+    exit 0;
+}
+
+if ($config{const_test_time} && $config{const_test_time} < 10) {
+    die "--const_test_time must be >= 10. See autobench(1) for details\n";
+}
+
+%clients = %{get_clients($config{clients})};
+foreach $client (keys %clients) {
+    $num_clients ++;
+}
+
+if ( $config{output_fmt} eq 'csv' ) {
+    $sep = ",";
+}
+elsif ( $config{output_fmt} eq 'tsv' ) {
+    $sep = "\t";
+}
+else {
+    die "Output Format '$config{output_fmt}' not supported";
+}
+
+# Set the output stream correctly 
+if (defined($config{file})){
+    # Filename supplied with --file option, try to open it for writing.
+    open(OUT, ">$config{file}") or die "Cannot open $config{file} for writing";
+}
+else {
+    # Connect OUT to STDOUT
+    open(OUT, ">&STDOUT") or die "Bizarre, cannot connect OUT to STDOUT!";
+}
+
+# Print first line of output
+# The following is really quite ugly...
+print OUT "dem_req_rate".$sep.
+       "req_rate_$config{host1}".$sep.
+       "con_rate_$config{host1}".$sep.
+       "min_rep_rate_$config{host1}".$sep.
+       "avg_rep_rate_$config{host1}".$sep.
+       "max_rep_rate_$config{host1}".$sep.
+       "stddev_rep_rate_$config{host1}".$sep.
+       "resp_time_$config{host1}".$sep.
+       "net_io_$config{host1}".$sep.
+       "errors_$config{host1}";
+
+if ($config{single_host}) {
+    print OUT "\n";
+}
+else {
+    print OUT $sep."req_rate_$config{host2}".$sep.
+       "con_rate_$config{host2}".$sep.
+       "min_rep_rate_$config{host2}".$sep.
+       "avg_rep_rate_$config{host2}".$sep.
+       "max_rep_rate_$config{host2}".$sep.
+       "stddev_rep_rate_$config{host2}".$sep.
+       "resp_time_$config{host2}".$sep.
+       "net_io_$config{host2}".$sep.
+       "errors_$config{host2}\n";
+}
+
+my $conn_total = $config{num_conn};
+
+for ($curr_rate = $config{low_rate}; $curr_rate <= $config{high_rate}; 
+     $curr_rate += $config{rate_step}) {
+
+    my $shared_rate = $curr_rate / $num_clients;
+    if ($config{const_test_time}) {
+        $config{num_conn} = $shared_rate * $config{const_test_time};
+    } else {
+        $config{num_conn} = $conn_total / $num_clients;
+    }
+    print STDERR `date`;
+    # Test Host 1
+    print STDERR "Testing server $config{host1} at rate: $curr_rate\n";
+    %res_host1 = %{test_host (\%config, $shared_rate, $config{host1}, $config{uri1}, $config{port1}, \%clients)};
+    
+    # Test Host 2
+    unless ( $config{single_host} ) {
+	print STDERR "About to test $config{host2} at rate: $curr_rate\n";
+	%res_host2 = %{test_host (\%config, $shared_rate, $config{host2}, $config{uri2}, $config{port2}, \%clients)};
+    } 
+
+    # Merge and Display Results
+    $dem_req = ($config{num_call} * $curr_rate);
+    print OUT $dem_req.$sep.
+	  $res_host1{req_rate}.$sep.
+	  $res_host1{conn_rate}.$sep.
+	  $res_host1{rep_rate_min}.$sep.
+	  $res_host1{rep_rate_avg}.$sep.
+	  $res_host1{rep_rate_max}.$sep.
+	  $res_host1{rep_rate_stdv}.$sep.
+          $res_host1{rep_time}.$sep.
+	  $res_host1{net_io}.$sep.
+          $res_host1{percent_errors};
+    if ($config{single_host}) {
+	print OUT "\n";
+    }
+    else {
+	print OUT $sep.$res_host2{req_rate}.$sep.
+	  $res_host2{conn_rate}.$sep.
+	  $res_host2{rep_rate_min}.$sep.
+	  $res_host2{rep_rate_avg}.$sep.
+	  $res_host2{rep_rate_max}.$sep.
+	  $res_host2{rep_rate_stdv}.$sep.
+	  $res_host2{rep_time}.$sep.
+	  $res_host2{net_io}.$sep.
+	  $res_host2{percent_errors}."\n";	   
+    }
+
+}
+
+print STDERR "Benchmark complete\n";

@@ -1,0 +1,430 @@
+#!/usr/bin/perl -w
+
+# autobenchd - daemon to perform benchmarking of a target host under
+# the instruction of autobench_admin
+
+# Copyright (C) 2002 Julian T. J. Midgley <jtjm@xenoclast.org>
+#
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+# A copy of version 2 of the GNU General Public License may be found
+# in the file "LICENCE" in the Autobench tarball.
+
+use strict;
+use Socket;
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use POSIX ":sys_wait_h";
+use vars qw (@dead_parrots);
+use Getopt::Long;
+
+my $LISTEN_PORT = 4600;
+my $LISTEN_ADDR = "0.0.0.0";
+my $DEBUG = 0;
+my $VERBOSE = 0;
+
+if (defined $ENV{DEBUG}) {
+    $DEBUG = $ENV{DEBUG};
+}
+
+#---------------------------------------------------------------------------
+# get_socket (listen_port, listen_addr)
+
+sub
+get_socket
+{
+    my ($port, $host) = @_;
+    my ($addr, $flags, $client_addr);
+
+    socket(SERVER, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+    setsockopt(SERVER, SOL_SOCKET, SO_REUSEADDR, 1);
+    $addr = sockaddr_in($port, inet_aton($host));
+    bind(SERVER, $addr)
+	or die "Couldn't bind to port $port: $!";
+    listen(SERVER, 0)
+	or die "Couldn't listen on port $port: $!";
+    set_non_block(*SERVER);
+    return *SERVER;
+}
+
+#---------------------------------------------------------------------------
+# set_non_block ($fh)
+sub
+set_non_block
+{
+    my $fh = shift @_;
+    my $flags = fcntl($fh, F_GETFL, 0)
+	or die "Can't get flags for socket: $!\n";
+    $flags = fcntl($fh, F_SETFL, $flags | O_NONBLOCK)
+	or die "Can't set flags for socket: $!\n";
+}
+#---------------------------------------------------------------------------
+# get_command ($conn)
+
+sub
+get_command
+{
+    my $conn = shift @_;
+    my ($rin, $rout, $nfound, $bytes, $buffer, $command);
+    my $eof = 0;
+    $command = "";
+    
+    $rin = '';
+    vec($rin, fileno($conn), 1) = 1;
+
+    while ((! $eof) && (! ($command =~ /END_AB/))) {
+	$buffer = "";
+    
+	$nfound = select($rout = $rin, undef, undef, undef);
+	if (vec($rout, fileno($conn), 1)) {
+	    $bytes = sysread($conn, $buffer, 2048);
+	    if (! defined $bytes) {
+		$command .= $!;
+		# $eof = 1;
+		print STDERR "Error: $!\n" if $DEBUG;
+	    }
+	    elsif ($bytes == 0) {
+		$eof = 1;
+	    }
+	    else {
+		$command .= $buffer;
+	    }
+	}
+    }
+    return ($command, $eof);
+}
+
+#---------------------------------------------------------------------------
+# split_command ($command);
+
+sub
+split_command
+{
+    my $command = shift @_;
+    my @elements = split(/\n/, $command);
+    return @elements;
+}
+
+#---------------------------------------------------------------------------
+# parse_httperf_output ($output, $results_ref)
+
+sub
+parse_httperf_output
+{
+    my ($output, $results_ref) = @_;    
+    my %results = %$results_ref;
+    $_ = $output;
+    if (/^Total: .*replies (\d+)/) {
+	$results{replies}=$1;
+    }
+    if (/^Connection rate: (\d+\.\d)/) {
+	$results{conn_rate}=$1;
+    }
+    if (/^Request rate: (\d+\.\d)/) {
+	$results{req_rate}=$1;
+    }
+    if (/^Reply rate .*min (\d+\.\d) avg (\d+\.\d) max (\d+\.\d) stddev (\d+\.\d)/) {
+	$results{rep_rate_min} = $1;
+	$results{rep_rate_avg} = $2;
+	$results{rep_rate_max} = $3;
+	$results{rep_rate_stdv} = $4;
+    }
+    if (/^Reply time .* response (\d+\.\d)/) {
+	$results{rep_time} = $1;
+    }
+    if (/^Net I\/O: (\d+\.\d)/) {
+	$results{net_io} = $1;
+    }
+    if (/^Errors: total (\d+)/) {
+	$results{errors} = $1;
+    }
+
+    return \%results;
+}
+
+#---------------------------------------------------------------------------
+# write_results ($fh, $results_ref);
+
+sub
+write_results 
+{
+    my ($fh, $results_ref) = @_;
+    my ($return_string, $key);
+
+    if (! defined %$results_ref) {
+	$return_string = "";
+    }
+    else {
+	foreach $key (keys %$results_ref) {
+	    $return_string .= $key.":".$$results_ref{$key}."\n";
+	}
+    }
+    if (! defined (syswrite($fh, $return_string))) {
+	die "Could not return results\n";
+    }    
+
+}
+
+#---------------------------------------------------------------------------
+# disp_help()
+sub
+disp_help 
+{
+    print "autobenchd - Copyright (C) 2002 Julian T. J. Midgley <jtjm\@xenoclast.org\n".
+	  "Distributed autobench client\n".
+	  "Usage: autobenchd [OPTIONS]\n".
+	  " --port <port>         : Listen port <port> (default 4600)\n".
+          " --bindaddr <bindaddr> : Bind to <bindaddr> (default 0.0.0.0)\n".
+          " --verbose             : Report progress\n".
+          " --debug               : Display debugging output, including raw httperf output\n";
+}
+
+
+#---------------------------------------------------------------------------
+# REAPER
+sub
+REAPER
+{
+    my $ex_parrot;
+    while (($ex_parrot = waitpid(-1, WNOHANG)) > 0) {
+	push (@dead_parrots, $ex_parrot);
+	print STDERR "Child $ex_parrot died\n" if $DEBUG;
+    }
+#    $SIG{CHLD} = \&REAPER;
+}
+
+#---------------------------------------------------------------------------
+# TERM_CATCHER
+sub 
+TERM_CATCHER
+{
+    $SIG{TERM} = 'DEFAULT';
+    print STDERR "TERM_CATCHER called\n";
+    # Kill ourselves and any child processes 
+    kill ('SIGTERM', -$$);
+}
+
+#---------------------------------------------------------------------------
+# main
+
+my ($addr, $rin, $rout, $nfound, $bytes, $buffer, $sock, $command, $eof);
+my ($client_addr, $client_port, $httperf_args, $time, $pid, $child_data);
+my ($finished, @admin_buffer, %config);
+
+$SIG{CHLD} = \&REAPER;
+
+# Parse options
+GetOptions(\%config, "debug", "verbose", "bindaddr=s", "port=i", "help");
+$LISTEN_ADDR = $config{bindaddr} if (defined $config{bindaddr});
+$LISTEN_PORT = $config{port} if (defined $config{port});
+$DEBUG       = 1 if (defined $config{debug});
+$VERBOSE     = 1 if (defined $config{verbose});
+
+if (defined $config{help}) {
+    disp_help();
+    exit 0;
+}
+
+$sock = get_socket ($LISTEN_PORT, $LISTEN_ADDR);
+print STDERR "Listening on $LISTEN_ADDR:$LISTEN_PORT\n" if $VERBOSE;
+
+while (1) {
+    # Listen for a connection
+    print STDERR "\nWaiting for connection...\n" if $VERBOSE;
+
+    $addr = $eof = 0;
+    $rin = '';
+    vec ($rin, fileno($sock), 1) = 1;
+
+    while (! $addr) {
+	$nfound = select($rout = $rin, undef, undef, undef);
+	if (vec ($rout, fileno($sock), 1)) {
+	    $addr = accept(ADMIN, $sock);	    
+	    if ($addr) {
+		set_non_block(*ADMIN);
+		($client_port, $client_addr) = sockaddr_in($addr);
+		$client_addr = inet_ntoa($client_addr);
+		print STDERR "Accepted connection from $client_addr:$client_port\n"
+		    if $VERBOSE;
+	    }
+	}
+    }
+    
+    while (! $eof) {
+	# Have a connection, process it
+	($command, $eof) = get_command(*ADMIN);
+	$child_data='';
+	if (! $eof) {
+	    ($httperf_args, $time, @admin_buffer) = split_command($command);
+	    shift @admin_buffer;
+	    if ($VERBOSE) {
+		print STDERR "Received command: $httperf_args\n";
+		my @tstr = localtime($time);
+		print STDERR "Start time: $tstr[2]:$tstr[1]:$tstr[0]\n";
+	    }
+	    print STDERR "TIME: $time\n" if $DEBUG;
+	    syswrite(ADMIN, "ACCEPTED\n");
+	    
+	    # Prepare socketpair for talking to our child
+	    socketpair(PARENT,CHILD, AF_UNIX, SOCK_STREAM, PF_UNSPEC);
+	    set_non_block(*PARENT);
+	    set_non_block(*CHILD);
+	
+	    # Sleep until time to start
+	    select(undef, undef, undef, ($time - time()));
+	    print STDERR "Starting benchmark\n" if $VERBOSE;
+	    $pid = fork();
+	    if (! defined $pid) {
+		syswrite(ADMIN, "ERR: Couldn't fork\n");
+		die "Couldn't fork";
+	    }
+	    elsif ($pid) {
+		print STDERR "Forked $pid\n" if $DEBUG;
+		# Parent
+
+		# Sit in select loop waiting either for results from
+		# child, or instructions to kill child from
+		# autobench_admin
+
+		my ($lrin, $lrout, $lnfound, $lcomm, $leof, $dead_child);
+		my ($lbytes, $lbuffer);
+		$finished = 0;
+		my $admin_command = '';
+		$child_data = '';
+
+		while ( ! $finished ) {
+		    # $finished set as follows:
+		    # -2 : Child closed connection
+		    # -1 : Admin closed connection
+		    #  1 : Child died
+
+		    $lrin = '';
+		    vec ($lrin, fileno(ADMIN), 1) = 1;
+		    vec ($lrin, fileno(CHILD), 1) = 1;
+		    $lnfound = select($lrout = $lrin, undef, undef, undef);
+
+		    if (vec ($lrout, fileno(ADMIN), 1)) {
+			# Admin wants to talk to us
+
+			$lbytes = sysread(ADMIN, $lbuffer, 2048);
+			if ( ! defined $lbytes) {
+			    # Probably EAGAIN, don't do anything
+			}
+			elsif ($lbytes == 0) {
+			    # EOF from admin, clean up
+			    $finished = -1;
+			    kill('SIGTERM', $pid);
+			    print STDERR "Child slain on ADMIN EOF\n" if $DEBUG;
+			}
+			else {
+			    $admin_command .= $lbuffer;
+			    if ($admin_command =~ /\n/) {
+				if ($admin_command =~ /\n$/) {
+				    push (@admin_buffer, split(/\n/,$admin_command));
+				    $admin_command = '';
+				}
+				else {
+				    my @temp = split(/\n/, $admin_command);
+				    $admin_command = pop(@temp);
+				    push (@admin_buffer, @temp);
+				}
+				
+			    }
+			}
+		    }
+		    while (scalar(@admin_buffer) > 0) {
+			# Complete command received
+			my $cmd = shift @admin_buffer;
+			print STDERR "ADMIN sent: $cmd\n" if $DEBUG;
+			if ($cmd eq 'ABORT') {
+			    kill('SIGTERM', $pid);
+			    print STDERR "Child slain on ABORT\n" if $DEBUG;
+			}
+			else {
+			    # Invalid command, ignore it
+			}
+		    }			    
+		    
+
+		    if (vec ($lrout, fileno(CHILD), 1)) {
+			# Child wants to talk to us
+			# FIXME
+			$lbytes = sysread(CHILD, $lbuffer, 4096);
+			if (! defined $lbytes) {
+			    # EAGAIN (probably)
+			}
+			elsif ($lbytes == 0) {
+			    # EOF from CHILD
+			    $finished = -2;
+			}
+			else {
+			    $child_data .= $lbuffer;
+			}
+		    }
+
+		    # Check for any dead children
+		    while ($dead_child = pop(@dead_parrots)){
+			unless ($finished) {
+			    # Don't ovewrite $finished if it's already set
+			    $finished = 1 if($dead_child == $pid);
+			}
+		    } 
+		} # END: while(! $finished)
+		print STDERR "Finished with status: $finished\n" if $DEBUG;
+		
+	    }
+	    else {
+		# Child
+		my %results;
+		setpgrp;
+		$SIG{TERM} = \&TERM_CATCHER;
+		close(ADMIN);
+		open(IN, "httperf $httperf_args |")
+		    or die "Child failed: httperf $httperf_args: $!";
+		while(<IN>) {
+		    %results = %{parse_httperf_output($_, \%results)};
+		    print STDERR if $DEBUG;
+		}
+		
+		if ( (! defined $results{replies}) || ($results{replies} == 0)) {
+		    undef %results;
+		}
+		else {
+		    $results{percent_errors} = ( 100 * $results{errors} / $results{replies} );
+		}
+
+		write_results(*PARENT, \%results);
+		# sleep(5) if $DEBUG;
+		exit(0);
+	    }
+		
+	}
+
+	unless ($eof || ($finished == -1)) {
+	    if ($child_data) {
+		print STDERR "Benchmark complete\n" if $VERBOSE;
+		syswrite (ADMIN, "BENCH_COMPLETE\n");
+		syswrite (ADMIN, $child_data);
+		syswrite (ADMIN, "END_DATA\n");
+	    }
+	    else {
+		print STDERR "Benchmark failed\n" if $VERBOSE;
+		syswrite (ADMIN, "BENCH_FAILED\n\n");
+	    }
+	}
+
+	print STDERR "Admin closed connection\n" if ($eof && $VERBOSE);
+    } # END while (! $eof)
+}
+

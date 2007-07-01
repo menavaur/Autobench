@@ -1,0 +1,55 @@
+.\"
+.\" crfile man page - Copyright (2001) Julian T. J. Midgley <jtjm@xenoclast.org>
+.\"
+.\"	This program is free software; you can redistribute it and/or modify
+.\"	it under the terms of the GNU General Public License as published by
+.\"	the Free Software Foundation; either version 2 of the License, or
+.\"	(at your option) any later version.
+.\"
+.\"	This program is distributed in the hope that it will be useful,
+.\"	but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"	GNU General Public License for more details.
+.\"
+.\"	You should have received a copy of the GNU General Public License
+.\"	along with this program; if not, write to the Free Software
+.\"	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.\"
+.TH CRFILE 1 "March 20, 2001" "" ""
+.SH NAME
+crfile \- Create arbitrary sized files
+.SH SYNOPSIS
+.BR "crfile \-f"
+.I filename
+.BR "\-s" 
+.I size 
+.BR " " [ "-w" [\fIlen\fR] " " | " -n" ]
+.SH DESCRIPTION
+.B crfile
+is used to create a file of the specified size, filled with random
+ASCII characters.  The 
+.B -n
+switch allows the creation of files padded with null characters
+(ie. containing large 'holes') that have an apparent length of the
+specified size, but contain only one random character.
+.SH OPTIONS
+.TP
+.B -f  \fIfilename\fR
+specifies the file to be created.  If the file exists, an
+error is generated.
+.TP
+.B -s \fIsize\fR
+\fIsize\fR is the size of the file, in bytes
+.TP
+.B -w\fIlen\fR
+wrap each line of output at \fIlen\fR characters.  If \fIlen\fR
+omitted, wrap at 80 characters.
+.TP
+.B -n
+Pad the file with null characters instead of random ASCII text.  This
+allows for the rapid creation of large files (useful for verifying
+that programs can deal with files > 2GB in size, for example).
+.SH AUTHOR
+Julian T. J. Midgley <jtjm@xenoclast.org>
+

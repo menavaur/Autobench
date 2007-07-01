@@ -1,0 +1,10 @@
+Revision: autobench--trunk--2.1--patch-1
+Archive: jtjm@xenoclast.org--phaedrus-2004
+Creator: Julian T. J. Midgley <jtjm@xenoclast.org>
+Date: Thu May 27 17:20:47 BST 2004
+Standard-date: 2004-05-27 16:20:47 GMT
+Modified-files: autobench_admin.1
+New-patches: jtjm@xenoclast.org--phaedrus-2004/autobench--trunk--2.1--patch-1
+Summary: Added warning about synchronising clocks to autobench_admin.1
+Keywords: 
+

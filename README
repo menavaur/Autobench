@@ -1,0 +1,69 @@
+Autobench - an HTTP benchmarking suite
+
+Copyright (C) 2001-2003 Julian T. J. Midgley <jtjm@xenoclast.org>
+
+Homepage: http://www.xenoclast.org/autobench/
+
+Licence
+-------
+
+Autobench is distributed under the terms of the GNU Public Licence, a
+copy of which may be found in the file "LICENCE".
+
+Manifest
+--------
+
+The 'autobench' package comprises the following programs:
+  
+   autobench
+     - A command-line wrapper for httperf which runs httperf a number
+       of times against a target host, producing a CSV or TSV format
+       file for later analysis/graphing.
+
+   autobench_admin 
+     - The administrative controller for distributed autobench.  Used
+       to issue commands to a cluster of machines running autobenchd,
+       in order to conduct synchronised multiple-client benchmarks
+       against a target host.  Collates the results from all the
+       clients in the cluster, and outputs CSV or TSV format file as
+       with autobench.
+
+   autobenchd
+     - The client dameon for distributed autobench.  Listens for
+       commands from autobench_admin, and runs httperf to benchmark
+       the target host.  Summarises the results and returns them to
+       autobench_admin for collation.
+
+   bench2graph
+     - Takes TSV benchmark results files produced by autobench or
+       autobench_admin and plots them using gnuplot.
+
+   crfile
+     - small utility for rapidly creating files filled with random
+       data of a specified size.  Useful for creating data sets for
+       benchmarking.
+
+   sesslog
+     - Creates session logs for use with the --wsesslog argument of
+       httperf from NCSA Combined or NCSA Common Log Format web access
+       logs.  Useful for generating real-life workloads from your log
+       files.
+
+Man pages are included for all of the above.
+
+Installation
+------------
+
+See the file "INSTALL" for installation instructions.
+
+Use
+---
+
+Autobench can be used in one of two modes.  In the non-distributed
+mode, a single autobench client runs benchmarks against one or two
+servers.  See the "autobench(1)" man page for details of this mode.
+
+The distributed mode allows a server to be benchmarked using several
+clients simultaneously (reducing the risk that the clients themselves
+will become the bottleneck).  See the "autobench_admin(1)" and
+"autobenchd(1)" man pages for details.

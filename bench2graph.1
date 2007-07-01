@@ -1,0 +1,46 @@
+.\"
+.\" bench2graph man page - Copyright (2001) Julian T. J. Midgley <jtjm@xenoclast.org>
+.\"
+.\"	This program is free software; you can redistribute it and/or modify
+.\"	it under the terms of the GNU General Public License as published by
+.\"	the Free Software Foundation; either version 2 of the License, or
+.\"	(at your option) any later version.
+.\"
+.\"	This program is distributed in the hope that it will be useful,
+.\"	but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\"	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\"	GNU General Public License for more details.
+.\"
+.\"	You should have received a copy of the GNU General Public License
+.\"	along with this program; if not, write to the Free Software
+.\"	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+.\"
+.\"
+.TH bench2graph 1 "June 20, 2001" "" ""
+.SH NAME
+bench2graph \- draws Postscript graphs from Autobench output (using gnuplot)
+.SH SYNOPSIS
+.BR "bench2graph \fIfile\fR \fIoutfile\fR [\fIcol1\fR \fIcol2\fR \fIcol3\fR...]"
+.SH DESCRIPTION
+.B bench2graph
+takes a TSV format autobench results file, and uses gnuplot to graph
+the results, producing output in Postscript.
+
+\fIfile\fR should be the name of the autobench results file.
+\fIoutfile\fR is the name of the file in which to store the output.
+
+Optionally, you can specify which of the columns in the autobench
+results file should be plotted, eg:
+.TP
+bench2graph results.tsv results.ps 3 5 6 
+
+Will plot columns 3, 5 and 6 from the file 'results.tsv'
+
+.SH SEE ALSO
+.B autobench\fR(1)
+.SH AUTHOR
+Samuel Dupas <samuel.dupas@synaptique.co.uk>
+
+Man Page by Julian T. J. Midgley <jtjm@xenoclast.org>
+
+
