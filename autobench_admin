@@ -390,7 +390,12 @@ print OUT "dem_req_rate".$sep.
        "stddev_rep_rate_$config{host1}".$sep.
        "resp_time_$config{host1}".$sep.
        "net_io_$config{host1}".$sep.
-       "errors_$config{host1}";
+       "errors_$config{host1}".$sep.
+       "status_100_$config{host1}".$sep.
+       "status_200_$config{host1}".$sep.
+       "status_300_$config{host1}".$sep.
+       "status_400_$config{host1}".$sep.
+       "status_500_$config{host1}";
 
 if ($config{single_host}) {
     print OUT "\n";
@@ -404,7 +409,12 @@ else {
        "stddev_rep_rate_$config{host2}".$sep.
        "resp_time_$config{host2}".$sep.
        "net_io_$config{host2}".$sep.
-       "errors_$config{host2}\n";
+       "errors_$config{host2}".$sep.
+       "status_100_$config{host2}".$sep.
+       "status_200_$config{host2}".$sep.
+       "status_300_$config{host2}".$sep.
+       "status_400_$config{host2}".$sep.
+       "status_500_$config{host2}\n";
 }
 
 my $conn_total = $config{num_conn};
@@ -440,7 +450,12 @@ for ($curr_rate = $config{low_rate}; $curr_rate <= $config{high_rate};
 	  $res_host1{rep_rate_stdv}.$sep.
           $res_host1{rep_time}.$sep.
 	  $res_host1{net_io}.$sep.
-          $res_host1{percent_errors};
+          $res_host1{percent_errors}.$sep.
+          $res_host1{status_100}.$sep.
+          $res_host1{status_200}.$sep.
+          $res_host1{status_300}.$sep.
+          $res_host1{status_400}.$sep.
+          $res_host1{status_500};
     if ($config{single_host}) {
 	print OUT "\n";
     }
@@ -453,7 +468,12 @@ for ($curr_rate = $config{low_rate}; $curr_rate <= $config{high_rate};
 	  $res_host2{rep_rate_stdv}.$sep.
 	  $res_host2{rep_time}.$sep.
 	  $res_host2{net_io}.$sep.
-	  $res_host2{percent_errors}."\n";	   
+	  $res_host2{percent_errors}.$sep.
+          $res_host2{status_100}.$sep.
+          $res_host2{status_200}.$sep.
+          $res_host2{status_300}.$sep.
+          $res_host2{status_400}.$sep.
+          $res_host2{status_500}."\n";
     }
 
 }

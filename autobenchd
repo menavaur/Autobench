@@ -143,6 +143,13 @@ parse_httperf_output
     if (/^Reply time .* response (\d+\.\d)/) {
 	$results{rep_time} = $1;
     }
+    if (/^Reply status.*1xx=(\d+) 2xx=(\d+) 3xx=(\d+) 4xx=(\d+) 5xx=(\d+)/) {
+        $results{status_100} = $1;
+        $results{status_200} = $2;
+        $results{status_300} = $3;
+        $results{status_400} = $4;
+        $results{status_500} = $5;
+    }
     if (/^Net I\/O: (\d+\.\d)/) {
 	$results{net_io} = $1;
     }
