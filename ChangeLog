@@ -1,7 +1,13 @@
+2012-03-31  Julian T. J. Midgley  <jtjm@menavaur.org>
+
+	* autobench_admin now (for values of "now" >~ 19 Aug 2009) reports
+	counts of HTTP status responses received (grouped into hundreds).
+	Requested by Ricardo Figueiredo.
+
 2004-05-27  Julian T. J. Midgley  <jtjm@xenoclast.org>
 
 	* Released autobench-2.1.2
-	
+
 	* Added warning about synchronising clocks to autobench_admin.1
 	Revision: autobench--trunk--2.1--patch-1
         modified files: autobench_admin.1
@@ -10,8 +16,8 @@
 	http://arch.xenoclast.org/phaedrus-2004/
 	Latest version may be fetched with:
 	  tla register-archive http://arch.xenoclast.org/phaedrus-2004/
-	  tla get autobench--trunk--2.1 autobench 
-	
+	  tla get autobench--trunk--2.1 autobench
+
 2003-11-25  Julian T. J. Midgley  <jtjm@xenoclast.org>
 
 	* Released [autobench-2-1-1]
