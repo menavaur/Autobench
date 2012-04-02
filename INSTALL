@@ -6,7 +6,7 @@ Prerequisites:
 
 httperf must be installed - it can be obtained from:
 
-http://www.hpl.hp.com/personal/David_Mosberger/httperf.html
+http://www.hpl.hp.com/research/linux/httperf/
 
 
 Installation
