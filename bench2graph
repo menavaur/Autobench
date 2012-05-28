@@ -74,7 +74,7 @@ echo set key outside below >> gnuplot.cmd
 echo set key box >> gnuplot.cmd
 echo set grid >> gnuplot.cmd
 echo set output \"${output}\" >> gnuplot.cmd
-echo set data style linespoints >> gnuplot.cmd
+echo set style data linespoints >> gnuplot.cmd
 echo set title \"$title\" >> gnuplot.cmd
 echo -n plot >> gnuplot.cmd
 j=0
