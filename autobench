@@ -150,36 +150,70 @@ test_host
 
     print STDERR "$httperf_command\n" if $DEBUG;
 
-    open (IN,  "$httperf_command |")
-	or die "Cannot execute httperf\n";
-    while(<IN>) {
-	if (/^Total: .*replies (\d+)/) {
-	    $results{replies}=$1;
-	}
-	if (/^Connection rate: (\d+\.\d)/) {
-	    $results{conn_rate}=$1;
-	}
-	if (/^Request rate: (\d+\.\d)/) {
-	    $results{req_rate}=$1;
-	}
-	if (/^Reply rate .*min (\d+\.\d) avg (\d+\.\d) max (\d+\.\d) stddev (\d+\.\d)/) {
-	    $results{rep_rate_min} = $1;
-	    $results{rep_rate_avg} = $2;
-	    $results{rep_rate_max} = $3;
-	    $results{rep_rate_stdv} = $4;
-	}
-	if (/^Reply time .* response (\d+\.\d)/) {
-	    $results{rep_time} = $1;
-	}
-	if (/^Net I\/O: (\d+\.\d)/) {
-	    $results{net_io} = $1;
-	}
-	if (/^Errors: total (\d+)/) {
-	    $results{errors} = $1;
-	}
-	print $_ unless $$config_ref{quiet};
-    }
-    close (IN);
+    # execute httperf command with a timeout
+    # if timeout, re execute httperf ...
+    my $done = 0;
+    my $timeout = 0;
+    while ($done == 0) {
+
+        # we expect the httperf to finish in $expected_time!
+        my $expected_time = ($$config_ref{num_conn} * $$config_ref{num_call} / $rate) * 5;
+
+        # we need to remeber the pid of httperf, in order to kill it.
+        my $pid = open (IN,  "$httperf_command |")
+            or die "Cannot execute httperf\n";
+
+        # run in eval mode..
+        eval {
+            # start the timer
+            local $SIG{ALRM} = sub { die "TIMEOUT" };
+            alarm ($expected_time);
+            
+            while(<IN>) {
+                if (/^Total: .*replies (\d+)/) {
+                    $results{replies}=$1;
+                }
+                if (/^Connection rate: (\d+\.\d)/) {
+                    $results{conn_rate}=$1;
+                }
+                if (/^Request rate: (\d+\.\d)/) {
+                    $results{req_rate}=$1;
+                }
+                if (/^Reply rate .*min (\d+\.\d) avg (\d+\.\d) max (\d+\.\d) stddev (\d+\.\d)/) {
+                    $results{rep_rate_min} = $1;
+                    $results{rep_rate_avg} = $2;
+                    $results{rep_rate_max} = $3;
+                    $results{rep_rate_stdv} = $4;
+                }
+                if (/^Reply time .* response (\d+\.\d)/) {
+                    $results{rep_time} = $1;
+                }
+                if (/^Net I\/O: (\d+\.\d)/) {
+                    $results{net_io} = $1;
+                }
+                if (/^Errors: total (\d+)/) {
+                    $results{errors} = $1;
+                }
+                print $_ unless $$config_ref{quiet};
+            }                           # end while (<IN>)
+            # stop timer
+            alarm (0);
+        };                           # end eval
+
+        # check if timeout
+        if ($@) {
+            die $@ unless $@ =~ /TIMEOUT/;
+            kill 9, $pid;
+            $timeout = 1;
+            $? ||= 9;
+            # some thing to do when timeout
+            print STDERR "Timeout with rate $rate\n";
+            sleep 300;
+        } else {
+            $done = 1;
+            close (IN);
+        }
+    }                           # end while ($done == 0)
     
     if ($results{replies} == 0) {
 	print STDERR "Zero replies received, test invalid: rate $rate\n";
