@@ -26,7 +26,7 @@ use strict;
 use Getopt::Long;
 
 # The location of the master config file
-my $MASTER_CONFIG = "/etc/autobench.conf";
+my $MASTER_CONFIG = "/usr/local/etc/autobench.conf";
 
 # The location of the autobench config file
 my $CONFIG_FILE = $ENV{HOME}."/.autobench.conf";
@@ -147,6 +147,8 @@ test_host
 	  $$config_ref{num_call}." --timeout ".
 	  $$config_ref{timeout}." --rate $rate --port $port".
 	  ($extra_httperf_opts || "");
+    $httperf_command .= " --add-header '".$$config_ref{add_header}."'" if (defined $$config_ref{add_header} and $$config_ref{add_header} !~ /^\s*$/);
+
 
     print STDERR "$httperf_command\n" if $DEBUG;
 
@@ -236,7 +238,7 @@ my (%res_host1, %res_host2, $dem_req);
 my %config = get_config($CONFIG_FILE);
 
 # Override config file with options supplied on the command line.
-GetOptions( \%config, "host1:s","host2:s","uri1:s","uri2:s","port1:i",
+GetOptions( \%config, "host1:s","host2:s","uri1:s","uri2:s", "add_header:s", "port1:i",
             "port2:i","low_rate:i","high_rate:i","rate_step:i","num_conn:i",
             "num_call:i","timeout:i","quiet","single_host","debug",
 	    "output_fmt=s","file=s","version", "const_test_time:i");
