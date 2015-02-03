@@ -20,7 +20,7 @@
 .SH NAME
 bench2graph \- draws Postscript graphs from Autobench output (using gnuplot)
 .SH SYNOPSIS
-.BR "bench2graph \fIfile\fR \fIoutfile\fR [\fIcol1\fR \fIcol2\fR \fIcol3\fR...]"
+.BR "bench2graph \fIfile\fR \fIoutfile\fR \fItitle\fR [\fIcol1\fR \fIcol2\fR \fIcol3\fR...]"
 .SH DESCRIPTION
 .B bench2graph
 takes a TSV format autobench results file, and uses gnuplot to graph
@@ -28,6 +28,7 @@ the results, producing output in Postscript.
 
 \fIfile\fR should be the name of the autobench results file.
 \fIoutfile\fR is the name of the file in which to store the output.
+\fItitle\fR is the title of the graph.
 
 Optionally, you can specify which of the columns in the autobench
 results file should be plotted, eg:

@@ -6,11 +6,12 @@
 # Thanks to Julian T J Midgley <jtjm@xenoclast.org>
 #
 
-if [ $# -lt 2 ] ; then
+if [ $# -lt 3 ] ; then
     echo "Usage          : bench2graph PARAM_1 PARAM_2 [ PARAM_3 ... PARAM_N ]"
     echo "Parameter 1    : autobench results file"
     echo "Parameter 2    : name of the postscript output file"
-    echo "Parameter 3..N : [optional] columns to display in the graphic"
+    echo "Parameter 3    : title of graph"
+    echo "Parameter 4..N : [optional] columns to display in the graphic"
     exit 1
 fi
 
@@ -33,14 +34,14 @@ if [ `echo $output |cut -c 1` != '/' ] ; then
 fi
 shift
 
+title=$1
+
+shift 
+
 while [ $# -ne 0 ] ; do
     liste="$liste,$1,"
     shift
 done
-
-
-echo -n "Enter the title : "
-read title
 
 if [ ! -d /tmp/graph_script ] ; then
     mkdir /tmp/graph_script
