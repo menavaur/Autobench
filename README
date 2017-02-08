@@ -29,7 +29,7 @@ The 'autobench' package comprises the following programs:
        with autobench.
 
    autobenchd
-     - The client dameon for distributed autobench.  Listens for
+     - The client daemon for distributed autobench.  Listens for
        commands from autobench_admin, and runs httperf to benchmark
        the target host.  Summarises the results and returns them to
        autobench_admin for collation.
